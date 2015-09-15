@@ -8,6 +8,7 @@
   },
   "author": "pierre.voisin@gmail.com",
   "dependencies": {
+    "unified-resource-locator": "^0.2.0",
     "ytility": "~0.3.2"
   },
   "devDependencies": {

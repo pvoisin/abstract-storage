@@ -1,5 +1,6 @@
 var expect = require("expect.js");
 
+// https://www.npmjs.com/package/proxyquire may help to test error cases
 var LevelDBStore = require("../../../source/stores/LevelDBStore");
 var RedisStore = require("../../../source/stores/RedisStore");
 
@@ -33,7 +34,7 @@ describe("RedisStore", function() {
 		var store = new RedisStore();
 		expect(store.id).to.be("default");
 
-		store = new LevelDBStore({id: "coordinates"});
+		store = new RedisStore({id: "coordinates"});
 		expect(store.id).to.be("coordinates");
 
 		store.open(function(error) {
