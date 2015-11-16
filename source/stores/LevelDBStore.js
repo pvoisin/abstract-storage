@@ -6,97 +6,104 @@ var Logger = require("../Logger");
 var logger = LevelDBStore.logger = new Logger("LevelDBStore");
 
 
-function LevelDBStore(options) {
-	var self = this;
+function LevelDBStore(path, options) {
+	Store.call(this);
+
+	if(!y.isString(path)) {
+		options = path;
+	}
 
 	options = y.merge({
 		id: "default",
 		folder: ".data"
 	}, options);
 
-	y.define(self, {
-		own: {
-			id: options.id,
-			folder: options.folder,
-			path: options.folder + "/" + options.id,
-			database: undefined
-		},
+	path = path || options.folder + "/" + options.id;
 
-		readable: ["id", "path", "database"]
+	var self = this, own = self.own = {
+		id: options.id,
+		path: options.folder + "/" + options.id,
+		client: undefined
+	};
+
+	y.expose(self, own, {
+		readable: ["id", "path", "client"]
 	});
 }
 
 y.inherit(LevelDBStore, Store);
 
-y.extend(LevelDBStore.prototype, {
-	open: function open(options, callback) {
-		var self = this, own = self.own;
 
-		callback = y.isFunction(options) ? options : callback;
-		options = (options === callback) ? {} : options;
+LevelDBStore.prototype.open = function open(options, callback) {
+	var self = this, own = self.own;
 
-		// Available options: https://github.com/level/levelup#options
-		options = y.extend({
-			valueEncoding: "json"
-		}, options);
+	callback = y.isFunction(options) ? options : callback;
+	options = (options === callback) ? {} : options;
 
-		// Cf. https://github.com/level/levelup#leveluplocation-options-callback
-		own.database = Level.open(own.path, options, function(error) {
-			if(error) {
-				logger.log("error", error);
-			}
+	// Available options: https://github.com/level/levelup#options
+	options = y.extend({
+		valueEncoding: "json"
+	}, options);
 
-			callback && callback.call(self, error, own.database);
-		});
+	callback && self.whether("opened", callback);
 
-		return self;
-	},
+	// Cf. https://github.com/level/levelup#leveluplocation-options-callback
+	own.client = Level.open(own.path, options, function(error) {
+		if(error) {
+			logger.log("error", error);
+			return self.emit("error", error);
+		}
 
-	close: function close(callback) {
-		var self = this, own = self.own;
+		self.emit("opened", own.client);
+	});
 
-		// Cf. https://github.com/level/leveldown#leveldownclosecallback
-		own.database.close(function(error) {
-			if(error) {
-				logger.log("error", error);
-			}
+	return self;
+};
 
-			callback && callback.apply(self);
-		});
+LevelDBStore.prototype.close = function close(callback) {
+	var self = this, own = self.own;
 
-		return self;
-	},
+	// Cf. https://github.com/level/leveldown#leveldownclosecallback
+	own.client.close(function(error) {
+		if(error) {
+			logger.log("error", error);
+		}
 
-	read: function read(key, callback) {
-		var self = this, own = self.own;
+		callback && callback.apply(self);
+	});
 
-		// Cf. https://github.com/level/leveldown#leveldowngetkey-options-callback
-		own.database.get(key, function(error, value) {
-			if(error) {
-				logger.log("error", error);
-			}
+	return self;
+};
 
-			callback && callback.apply(self, arguments);
-		});
+LevelDBStore.prototype.read = function read(key, callback) {
+	var self = this, own = self.own;
 
-		return self;
-	},
+	// Cf. https://github.com/level/leveldown#leveldowngetkey-options-callback
+	own.client.get(key, function(error, value) {
+		if(error) {
+			logger.log("error", error);
+		}
 
-	write: function write(key, value, callback) {
-		var self = this, own = self.own;
+		callback && callback.apply(self, arguments);
+	});
 
-		// Cf. https://github.com/level/leveldown#leveldownputkey-value-options-callback
-		own.database.put(key, value, function(error) {
-			if(error) {
-				logger.log("error", error);
-			}
+	return self;
+};
 
-			callback && callback.apply(self, arguments);
-		});
+LevelDBStore.prototype.write = function write(key, value, callback) {
+	var self = this, own = self.own;
 
-		return self;
-	}
-});
+	// Cf. https://github.com/level/leveldown#leveldownputkey-value-options-callback
+	own.client.put(key, value, function(error) {
+		if(error) {
+			logger.log("error", error);
+		}
+
+		callback && callback.apply(self, arguments);
+	});
+
+	return self;
+};
 
 
 module.exports = LevelDBStore;

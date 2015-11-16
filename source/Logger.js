@@ -1,11 +1,10 @@
 var y = require("ytility");
+var Path = require("path");
+var Module = module.constructor;
 var Bunyan = require("bunyan");
 
-function Logger(name, options) {
-	if(typeof name !== "string") {
-		throw new Error("Invalid name: " + name);
-	}
 
+function Logger(topic, options) {
 	options = y.merge({
 		// Cf. https://github.com/trentm/node-bunyan#levels
 		// See comments in Logger#log.
@@ -19,18 +18,17 @@ function Logger(name, options) {
 		}
 	}, options);
 
-	var self = y.define(this, {
-		own: y.merge({
-			name: name,
-			implementation: Bunyan.createLogger({name: name})
-		}, options),
+	var self = this, own = self.own = {
+		topic: topic,
+		levels: options.levels,
+		implementation: Bunyan.createLogger({
+			name: (topic instanceof Module) ? topic.exports.name || Path.basename(topic.id, Path.extname(topic.id)) : String(topic)
+		})
+	};
 
-		readable: ["name"]
-	});
+	Object.defineProperty(own, "level", {
+		enumerable: true,
 
-	var own = self.own;
-
-	Object.defineProperty(self, "level", {
 		get: function() {
 			return own.implementation.level();
 		},
@@ -38,32 +36,36 @@ function Logger(name, options) {
 		// Current abstraction is compatible with Bunyan's implementation:
 		// Cf. https://github.com/trentm/node-bunyan/blob/master/lib/bunyan.js#L239
 		set: function(level) {
-			var levels = Object.keys(own.levels);
-			if(levels.indexOf(level) < 0) {
-				throw new Error("Available log levels: %s", levels);
+			if(!y.isNumber(Number(level))) {
+				var levels = Object.keys(own.levels);
+				if(levels.indexOf(level) < 0) {
+					throw new Error("Invalid logging level: " + JSON.stringify(level));
+				}
 			}
+
+			level = own.levels[level] || level;
 
 			own.implementation.level(level);
 		}
 	});
+
+	own.level = process.env.LOGGING_LEVEL || "information";
+
+	y.expose(self, own, {
+		readable: ["topic", "level"],
+		writable: ["level"]
+	});
 }
 
-y.extend(Logger.prototype, {
-	log: function log(level, record) {
-		var self = this, own = self.own;
+Logger.prototype.log = function log(level/*, ... */) {
+	var self = this, own = self.own;
 
-		if(arguments.length < 2) {
-			record = level;
-			level = "information";
-		}
+	level = own.levels[level] || level;
 
-		level = own.levels[level] || level;
-
-		// LIMITATION: currently, we should somehow map Bunyan's default levels to be able to call any defined emitter...
-		// Cf. https://github.com/trentm/node-bunyan/issues/228
-		return own.implementation[Bunyan.nameFromLevel[level]].call(own.implementation, record);
-	}
-});
+	// LIMITATION: currently, we should somehow map Bunyan's default levels to be able to call any defined emitter...
+	// Cf. https://github.com/trentm/node-bunyan/issues/228
+	return own.implementation[Bunyan.nameFromLevel[level]].apply(own.implementation, y.slice(arguments, 1));
+};
 
 
 module.exports = Logger;

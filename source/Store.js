@@ -1,4 +1,4 @@
-var EventEmitter = require("events").EventEmitter;
+var Observable = require("./Observable");
 var y = require("ytility");
 
 
@@ -7,24 +7,22 @@ function Store() {
 	if(this.constructor === Store) {
 		throw new Error("Abstract!");
 	}
+
+	Observable.call(this);
 }
 
-y.inherit(Store, EventEmitter);
+y.inherit(Store, Observable);
 
 y.merge(Store.prototype, {
-	open: missing,
-	close: missing,
-	read: missing,
-	write: missing
+	open: throwNotImplemented,
+	close: throwNotImplemented,
+	read: throwNotImplemented,
+	write: throwNotImplemented
 });
 
-function missing() {
+function throwNotImplemented() {
 	throw new Error("Not implemented!");
 }
-
-Store.NotFoundError = y.error(function NotFoundError(key) {
-	this.message = "Not found:  \"" + key + "\".";
-});
 
 
 module.exports = Store;

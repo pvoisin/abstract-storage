@@ -1,17 +1,17 @@
-var URL = require("unified-resource-identifier");
+var URL = require("unified-resource-locator");
 var y = require("ytility");
 var Flow = require("async");
 var Redis = require("redis");
 var Store = require("../Store");
 
 var Logger = require("../Logger");
-var logger = RedisStore.logger = new Logger("RedisStore");
+var logger = new Logger(module);
 
 
 function RedisStore(locator, options) {
-	var self = this;
+	Store.call(this);
 
-	if(y.isObject(locator)) {
+	if(!y.isString(locator)) {
 		options = locator;
 		locator = "redis://localhost:6379";
 	}
@@ -20,126 +20,121 @@ function RedisStore(locator, options) {
 		id: "default"
 	}, options);
 
-	y.define(self, {
-		own: {
-			id: options.id,
-			client: undefined,
-			locator: new URL(locator)
-		},
+	var self = this, own = self.own = {
+		id: options.id,
+		locator: new URL(locator),
+		client: undefined
+	};
 
+	y.expose(self, own, {
 		readable: ["id", "client", "locator"]
 	});
-/* TODO:
-  var redis = require('redis')
-    .createClient(parsed.port, parsed.hostname, parsed.query);
-
-  if (parsed.password) {
-    redis.auth(parsed.password, function(err) {
-      if (err) throw err;
-    });
-  }
-
-  parsed.password = (parsed.auth || '').split(':')[1];
-  parsed.path = (parsed.pathname || '/').slice(1);
-  parsed.database = parsed.path.length ? parsed.path : '0';
-//*/
 }
 
 y.inherit(RedisStore, Store);
 
-y.extend(RedisStore.prototype, {
-	"open": function open(options, callback) {
-		var self = this, own = self.own;
 
-		callback = y.isFunction(options) ? options : callback;
-		options = (options === callback) ? {} : options;
+RedisStore.prototype.open = function open(options, callback) {
+	var self = this, own = self.own;
 
-		options = y.merge({
-			database: own.database
-		}, options);
+	callback = y.isFunction(options) ? options : callback;
+	options = (options === callback) ? {} : options;
 
-		own.database = options.database;
+	options = y.merge({
+		database: own.database
+	}, options);
 
-		// Cf. https://github.com/mranney/node_redis#rediscreateclient
-		own.client = Redis.createClient(options)
-			.on("connect", function() {
-				if(own.database) {
-					client.send_anyway = true;
-					client.select(own.database);
-					client.send_anyway = false;
+	own.database = options.database;
+
+	callback && self.whether("opened", callback);
+
+	// Cf. https://github.com/mranney/node_redis#rediscreateclient
+	own.client = Redis.createClient(options)
+		.on("connect", function() {
+			if(own.database) {
+				own.client.send_anyway = true;
+				own.client.select(own.database, whenDataBaseSelected);
+				own.client.send_anyway = false;
+
+				function whenDataBaseSelected() {
+					whenClientConnected();
 				}
-
-				callback && callback.call(self, null, client);
-			})
-			.on("error", function(error) {
-				logger.log("error", error.stack);
-// :TODO: Can we detect errors relative to connection only?
-// Cf. https://github.com/mranney/node_redis#error
-//				callback && callback.call(self, error);
-			});
-
-		return self;
-	},
-
-	"close": function close(callback) {
-		var self = this, own = self.own;
-
-		callback && own.client.once("end", function() {
-			callback.call(self);
-		});
-
-		own.client.end();
-
-		return self;
-	},
-
-	"read": function read(key, callback) {
-		var self = this, own = self.own;
-
-		Flow.waterfall(
-			[
-				function getType(proceed) {
-					own.client.type(key, function(error, results) {
-						proceed(error, results);
-					});
-				},
-
-				function getValue(type, proceed) {
-					var command = (type !== "hash") ? "get" : "hgetall";
-
-					own.client[command](key, function(error, results) {
-						proceed(error, results);
-					});
-				}
-			],
-
-			function finalize(error, results) {
-				if(error) {
-					logger.log("error", error);
-				}
-
-				callback && callback.apply(self, arguments);
 			}
-		);
-
-		return self;
-	},
-
-	"write": function write(key, value, callback) {
-		var self = this, own = self.own;
-		var command = (typeof value !== "object") ? "set" : "hmset";
-
-		own.client[command](key, value, function(error, results) {
-			if(error) {
-				logger.log("error", error);
+			else {
+				whenClientConnected();
 			}
 
-			callback && callback.apply(self, arguments);
+			function whenClientConnected() {
+				own.client.once("end", function() {
+					self.emit("closed");
+				});
+
+				self.emit("opened", own.client);
+			}
+		})
+		// Cf. https://github.com/mranney/node_redis#error
+		.on("error", function(error) {
+			logger.log("error", error.stack);
+			self.emit("error", error);
 		});
 
-		return self;
+	return self;
+};
+
+RedisStore.prototype.close = function close(callback) {
+	var self = this, own = self.own;
+
+	own.client.end();
+
+	setImmediate(function() {
+		callback.call(self);
+	});
+
+	return self;
+};
+
+RedisStore.prototype.read = function read(key, callback) {
+	var self = this, own = self.own;
+
+	function getType(proceed) {
+		own.client.type(key, function(error, results) {
+			proceed(error, results);
+		});
 	}
-});
+
+	function getValue(type, proceed) {
+		var command = (type !== "hash") ? "get" : "hgetall";
+
+		own.client[command](key, function(error, results) {
+			proceed(error, results);
+		});
+	}
+
+	Flow.waterfall([getType, getValue], function finalize(error, results) {
+		if(error) {
+			logger.log("error", error);
+		}
+
+		callback && callback.apply(self, arguments);
+	});
+
+	return self;
+};
+
+RedisStore.prototype.write = function write(key, value, callback) {
+	var self = this, own = self.own;
+	var command = (typeof value !== "object") ? "set" : "hmset";
+
+	own.client[command](key, value, function(error, results) {
+		if(error) {
+			logger.log("error", error);
+		}
+
+		callback && callback.apply(self, arguments);
+	});
+
+	return self;
+};
 
 
 module.exports = RedisStore;

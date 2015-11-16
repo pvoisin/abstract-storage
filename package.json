@@ -8,13 +8,14 @@
   },
   "author": "pierre.voisin@gmail.com",
   "dependencies": {
-    "unified-resource-locator": "^0.2.0",
+    "unified-resource-locator": "^1.0.1",
     "ytility": "~0.3.2"
   },
   "devDependencies": {
     "expect.js": "~0.3.1",
     "grunt": "~0.4.5",
     "grunt-mocha-test": "~0.12.7",
+    "istanbul": "^0.4.0",
     "level": "~1.2.0",
     "mocha": "~2.2.5",
     "nock": "~2.7.0",

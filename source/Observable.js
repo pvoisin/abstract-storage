@@ -12,15 +12,15 @@ inherit(Observable, EventEmitter);
 Observable.prototype.notify = Observable.prototype.emit;
 Observable.prototype.when = Observable.prototype.on;
 
-Observable.prototype.emitAndCall = function emitAndCall(event, callback) {
+Observable.prototype.whether = function whether(event, callback) {
 	var self = this;
 
-	callback && self.once(event, function() {
-		callback.apply(self, (event === "error") ? arguments : [null].concat(Array.prototype.slice.call(arguments)));
-	});
+	self.once("error", callback);
 
-	// EventEmitter#[emit](https://github.com/joyent/node/blob/v0.10.39/lib/events.js#L53) returns true or false.
-	return self.emit.apply(self, [event].concat(Array.prototype.slice.call(arguments, (2))));
+	self.once(event, function() {
+		self.removeListener("error", callback);
+		callback.apply(null, [null].concat(Array.prototype.slice.call(arguments)));
+	});
 };
 
 

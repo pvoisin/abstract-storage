@@ -1,52 +1,35 @@
+var EventEmitter = require("events").EventEmitter;
+var Observable = require("../../../source/Observable");
+var Store = require("../../../source/Store");
+
 var expect = require("expect.js");
-
-// https://www.npmjs.com/package/proxyquire may help to test error cases
-var LevelDBStore = require("../../../source/stores/LevelDBStore");
-var RedisStore = require("../../../source/stores/RedisStore");
+var y = require("ytility");
 
 
-describe("LevelDBStore", function() {
-	it("should work properly", function(proceed) {
-		var store = new LevelDBStore();
-		expect(store.id).to.be("default");
+describe("Store", function() {
+	describe("constructor", function() {
+		it("should throw an error since Store is abstract", function() {
+			var instantiation = function() {
+				new Store();
+			};
 
-		store = new LevelDBStore({id: "coordinates"});
-		expect(store.id).to.be("coordinates");
-
-		store.open(function(error) {
-			expect(error).not.to.be.a(Error);
-
-			store.write("#1", {city: "Montréal"}, function() {
-				store.read("#1", function(error, value) {
-					expect(error).not.to.be.a(Error);
-					expect(value).to.eql({city: "Montréal"});
-
-					store.close(proceed);
-				});
-			});
+			expect(instantiation).to.throwError(/^Abstract/);
 		});
 	});
-});
 
+	["open", "close", "read", "write"].forEach(function(abstractMethod) {
+		describe("#" + abstractMethod, function() {
+			it("should throw an error since it is abstract", function() {
+				function DummyStore() {
+					Store.call(this);
+				}
 
-describe("RedisStore", function() {
-	it("should work properly", function(proceed) {
-		var store = new RedisStore();
-		expect(store.id).to.be("default");
+				y.inherit(DummyStore, Store);
+				var store = new DummyStore();
 
-		store = new RedisStore({id: "coordinates"});
-		expect(store.id).to.be("coordinates");
-
-		store.open(function(error) {
-			expect(error).not.to.be.a(Error);
-
-			store.write("#1", {city: "Montréal"}, function() {
-				store.read("#1", function(error, value) {
-					expect(error).not.to.be.a(Error);
-					expect(value).to.eql({city: "Montréal"});
-
-					store.close(proceed);
-				});
+				expect(function() {
+					store[abstractMethod]();
+				}).to.throwError(/^Not implemented/);
 			});
 		});
 	});
